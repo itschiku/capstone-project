@@ -1,127 +1,57 @@
-version: '3.8'
-
 services:
-  # MySQL Database
   mysql:
     image: mysql:8.0
     container_name: capstone-mysql
-    restart: always
+    network_mode: host
+    env_file:
+      - .env
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-capstone_db}
-      MYSQL_USER: ${MYSQL_USER:-capstone_user}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-capstone123}
-    ports:
-      - "3306:3306"
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
-    networks:
-      - capstone-network
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root123}"]
-      timeout: 20s
-      retries: 10
 
-  # FastAPI Backend
   fastapi:
     build: ./fastapi
     container_name: capstone-fastapi
-    restart: always
-    environment:
-      DB_HOST: mysql
-      DB_USER: ${MYSQL_USER:-capstone_user}
-      DB_PASSWORD: ${MYSQL_PASSWORD:-capstone123}
-      DB_NAME: ${MYSQL_DATABASE:-capstone_db}
-      APP_ENV: ${APP_ENV:-development}
-    ports:
-      - "8000:8000"
-    depends_on:
-      mysql:
-        condition: service_healthy
-    networks:
-      - capstone-network
+    network_mode: host
+    env_file:
+      - .env
 
-  # Node.js Backend
   nodejs:
     build: ./nodejs
     container_name: capstone-nodejs
-    restart: always
-    environment:
-      DB_HOST: mysql
-      DB_USER: ${MYSQL_USER:-capstone_user}
-      DB_PASSWORD: ${MYSQL_PASSWORD:-capstone123}
-      DB_NAME: ${MYSQL_DATABASE:-capstone_db}
-      NODE_ENV: ${NODE_ENV:-development}
-    ports:
-      - "5000:5000"
-    depends_on:
-      mysql:
-        condition: service_healthy
-    networks:
-      - capstone-network
+    network_mode: host
+    env_file:
+      - .env
 
-  # Django Backend
-  django:
-    build: ./django
-    container_name: capstone-django
-    restart: always
-    environment:
-      DB_HOST: mysql
-      DB_USER: ${MYSQL_USER:-capstone_user}
-      DB_PASSWORD: ${MYSQL_PASSWORD:-capstone123}
-      DB_NAME: ${MYSQL_DATABASE:-capstone_db}
-      DJANGO_SETTINGS_MODULE: django_project.settings
-    ports:
-      - "8080:8080"
-    depends_on:
-      mysql:
-        condition: service_healthy
-    networks:
-      - capstone-network
+  springboot:
+    build: ./springboot
+    container_name: capstone-springboot
+    network_mode: host
+    env_file:
+      - .env
 
-  # .NET Core Backend
   dotnet:
     build: ./dotnet
     container_name: capstone-dotnet
-    restart: always
-    environment:
-      DB_HOST: mysql
-      DB_USER: ${MYSQL_USER:-capstone_user}
-      DB_PASSWORD: ${MYSQL_PASSWORD:-capstone123}
-      DB_NAME: ${MYSQL_DATABASE:-capstone_db}
-      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
-    ports:
-      - "7000:7000"
-    depends_on:
-      mysql:
-        condition: service_healthy
-    networks:
-      - capstone-network
+    network_mode: host
+    env_file:
+      - .env
 
-  # Nginx Reverse Proxy (for AWS deployment)
   nginx:
     image: nginx:alpine
     container_name: capstone-nginx
-    restart: always
-    ports:
-      - "80:80"
-      - "443:443"
+    network_mode: host
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       - fastapi
       - nodejs
-      - django
+      - springboot
       - dotnet
-    networks:
-      - capstone-network
-    profiles:
-      - production
-
-networks:
-  capstone-network:
-    driver: bridge
 
 volumes:
   mysql_data:
