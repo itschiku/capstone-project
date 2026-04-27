@@ -1,29 +1,13 @@
 using MySql.Data.MySqlClient;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
-
-// Load .env file
-var envPath = Path.Combine(Directory.GetCurrentDirectory(), "../.env");
-if (File.Exists(envPath))
-{
-    foreach (var line in File.ReadAllLines(envPath))
-    {
-        if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#"))
-            continue;
-        
-        var parts = line.Split('=', 2);
-        if (parts.Length == 2)
-        {
-            Environment.SetEnvironmentVariable(parts[0], parts[1]);
-        }
-    }
-}
 
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins(Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "*")
+        policy.AllowAnyOrigin()
               .AllowAnyMethod()
               .AllowAnyHeader();
     });
@@ -43,7 +27,6 @@ app.MapGet("/health", () => new
 {
     status = "healthy",
     backend = ".NET",
-    environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production",
     timestamp = DateTime.Now
 });
 
@@ -65,14 +48,34 @@ app.MapPost("/users", async (HttpRequest request) =>
 {
     using var reader = new StreamReader(request.Body);
     var body = await reader.ReadToEndAsync();
-    var json = System.Text.Json.JsonSerializer.Deserialize<CreateUserRequest>(body);
+    using var jsonDoc = JsonDocument.Parse(body);
+    var root = jsonDoc.RootElement;
+
+    // Accept both lowercase and uppercase property names
+    string name = "";
+    string email = "";
+
+    if (root.TryGetProperty("name", out var nameProp))
+        name = nameProp.GetString() ?? "";
+    else if (root.TryGetProperty("Name", out var nameProp2))
+        name = nameProp2.GetString() ?? "";
+
+    if (root.TryGetProperty("email", out var emailProp))
+        email = emailProp.GetString() ?? "";
+    else if (root.TryGetProperty("Email", out var emailProp2))
+        email = emailProp2.GetString() ?? "";
+
+    if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(email))
+        return Results.BadRequest(new { error = "Name and email are required" });
+
     using var conn = new MySqlConnection(connectionString);
     await conn.OpenAsync();
     using var cmd = new MySqlCommand("INSERT INTO users (name, email, created_at) VALUES (@name, @email, NOW()); SELECT LAST_INSERT_ID();", conn);
-    cmd.Parameters.AddWithValue("@name", json!.Name);
-    cmd.Parameters.AddWithValue("@email", json!.Email);
+    cmd.Parameters.AddWithValue("@name", name);
+    cmd.Parameters.AddWithValue("@email", email);
     var newId = Convert.ToInt32(await cmd.ExecuteScalarAsync());
-    return new { id = newId, name = json.Name, email = json.Email, created_at = DateTime.Now };
+
+    return Results.Ok(new { id = newId, name, email, created_at = DateTime.Now });
 });
 
 app.MapDelete("/users/{id}", async (int id) =>
@@ -82,10 +85,7 @@ app.MapDelete("/users/{id}", async (int id) =>
     using var cmd = new MySqlCommand("DELETE FROM users WHERE id = @id", conn);
     cmd.Parameters.AddWithValue("@id", id);
     await cmd.ExecuteNonQueryAsync();
-    return new { message = "User deleted successfully" };
+    return Results.Ok(new { message = "User deleted successfully" });
 });
 
-var port = Environment.GetEnvironmentVariable("DOTNET_PORT") ?? "7000";
-app.Run($"http://0.0.0.0:{port}");
-
-record CreateUserRequest(string Name, string Email);
+app.Run("http://0.0.0.0:7000");
