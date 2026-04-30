@@ -27,7 +27,9 @@ pipeline {
                 script {
                     dir('backend/fastapi') {
                         sh "docker build -t ${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/capstone-fastapi:latest ."
+                        sh "docker tag ${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/capstone-fastapi:latest ${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/capstone-fastapi:build-${BUILD_NUMBER}"
                         sh "docker push ${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/capstone-fastapi:latest"
+                        sh "docker push ${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/capstone-fastapi:build-${BUILD_NUMBER}"
                     }
                 }
             }
@@ -38,7 +40,9 @@ pipeline {
                 script {
                     dir('backend/nodejs') {
                         sh "docker build -t ${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/capstone-nodejs:latest ."
+                        sh "docker tag ${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/capstone-nodejs:latest ${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/capstone-nodejs:build-${BUILD_NUMBER}"
                         sh "docker push ${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/capstone-nodejs:latest"
+                        sh "docker push ${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/capstone-nodejs:build-${BUILD_NUMBER}"
                     }
                 }
             }
@@ -49,7 +53,9 @@ pipeline {
                 script {
                     dir('backend/springboot') {
                         sh "docker build -t ${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/capstone-springboot:latest ."
+                        sh "docker tag ${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/capstone-springboot:latest ${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/capstone-springboot:build-${BUILD_NUMBER}"
                         sh "docker push ${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/capstone-springboot:latest"
+                        sh "docker push ${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/capstone-springboot:build-${BUILD_NUMBER}"
                     }
                 }
             }
@@ -60,7 +66,9 @@ pipeline {
                 script {
                     dir('backend/dotnet') {
                         sh "docker build -t ${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/capstone-dotnet:latest ."
+                        sh "docker tag ${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/capstone-dotnet:latest ${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/capstone-dotnet:build-${BUILD_NUMBER}"
                         sh "docker push ${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/capstone-dotnet:latest"
+                        sh "docker push ${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/capstone-dotnet:build-${BUILD_NUMBER}"
                     }
                 }
             }
@@ -77,7 +85,7 @@ pipeline {
         stage('Verify') {
             steps {
                 script {
-                    sh "aws ssm send-command --instance-ids ${BACKEND_EC2_ID} --region ${AWS_REGION} --document-name AWS-RunShellScript --parameters 'commands=[\"docker ps --format table {{.Names}}\\t{{.Status}}\"]'"
+                    sh "aws ssm send-command --instance-ids ${BACKEND_EC2_ID} --region ${AWS_REGION} --document-name AWS-RunShellScript --parameters 'commands=[\"docker ps --format table {{.Names}}\\\\t{{.Status}}\"]'"
                 }
             }
         }
