@@ -1,52 +1,51 @@
 services:
-  mysql:
-    image: mysql:8.0
-    container_name: capstone-mysql
-    network_mode: host
-    env_file:
-      - .env
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${DB_NAME}
-      MYSQL_USER: ${DB_USER}
-      MYSQL_PASSWORD: ${DB_PASSWORD}
-    volumes:
-      - mysql_data:/var/lib/mysql
-
   fastapi:
     build: ./fastapi
     container_name: capstone-fastapi
-    network_mode: host
+    ports:
+      - "8000:8000"
     env_file:
       - .env
+    networks:
+      - capstone-network
 
   nodejs:
     build: ./nodejs
     container_name: capstone-nodejs
-    network_mode: host
+    ports:
+      - "5000:5000"
     env_file:
       - .env
+    networks:
+      - capstone-network
 
   springboot:
     build: ./springboot
     container_name: capstone-springboot
-    network_mode: host
+    ports:
+      - "8081:8081"
     env_file:
       - .env
     environment:
       SPRINGBOOT_PORT: 8081
+    networks:
+      - capstone-network
 
   dotnet:
     build: ./dotnet
     container_name: capstone-dotnet
-    network_mode: host
+    ports:
+      - "7000:7000"
     env_file:
       - .env
+    networks:
+      - capstone-network
 
   nginx:
     image: nginx:alpine
     container_name: capstone-nginx
-    network_mode: host
+    ports:
+      - "80:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
@@ -54,6 +53,9 @@ services:
       - nodejs
       - springboot
       - dotnet
+    networks:
+      - capstone-network
 
-volumes:
-  mysql_data:
+networks:
+  capstone-network:
+    driver: bridge
