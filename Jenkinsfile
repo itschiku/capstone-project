@@ -16,10 +16,10 @@ pipeline {
         stage('Deploy to Backend EC2') {
             steps {
                 script {
-                    sh """
+                    sh '''
                         aws ssm send-command \
-                            --instance-ids "${BACKEND_EC2_ID}" \
-                            --region "${AWS_REGION}" \
+                            --instance-ids i-0aba37cc978373707 \
+                            --region ap-south-1 \
                             --document-name "AWS-RunShellScript" \
                             --parameters 'commands=[
                                 "cd /home/ssm-user/capstone-project",
@@ -31,7 +31,7 @@ pipeline {
                                 "docker system prune -f"
                             ]' \
                             --comment "Deploy from Jenkins"
-                    """
+                    '''
                 }
             }
         }
@@ -39,15 +39,24 @@ pipeline {
         stage('Verify') {
             steps {
                 script {
-                    sh """
+                    sh '''
                         aws ssm send-command \
-                            --instance-ids "${BACKEND_EC2_ID}" \
-                            --region "${AWS_REGION}" \
+                            --instance-ids i-0aba37cc978373707 \
+                            --region ap-south-1 \
                             --document-name "AWS-RunShellScript" \
-                            --parameters 'commands=["docker ps --format \"table {{.Names}}\t{{.Status}}\""]'
-                    """
+                            --parameters 'commands=["docker ps --format \\"table {{.Names}}\\t{{.Status}}\\""]'
+                    '''
                 }
             }
+        }
+    }
+    
+    post {
+        success {
+            echo '✅ Deployment successful!'
+        }
+        failure {
+            echo '❌ Deployment failed!'
         }
     }
 }
