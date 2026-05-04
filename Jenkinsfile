@@ -18,40 +18,18 @@ pipeline {
         stage('Fetch Database Secrets') {
             steps {
                 script {
-                    // Fetch the secret from AWS Secrets Manager
                     def secretJson = sh(
                         script: "aws secretsmanager get-secret-value --secret-id ${DB_SECRET_NAME} --region ${AWS_REGION} --query SecretString --output text",
                         returnStdout: true
                     ).trim()
                     
-                    // Parse JSON and set environment variables
-                    env.DB_HOST = sh(
-                        script: "echo '${secretJson}' | python3 -c \"import sys, json; print(json.load(sys.stdin)['host'])\"",
-                        returnStdout: true
-                    ).trim()
+                    env.DB_HOST = sh(script: "echo '${secretJson}' | python3 -c \"import sys, json; print(json.load(sys.stdin)['host'])\"", returnStdout: true).trim()
+                    env.DB_USER = sh(script: "echo '${secretJson}' | python3 -c \"import sys, json; print(json.load(sys.stdin)['username'])\"", returnStdout: true).trim()
+                    env.DB_PASSWORD = sh(script: "echo '${secretJson}' | python3 -c \"import sys, json; print(json.load(sys.stdin)['password'])\"", returnStdout: true).trim()
+                    env.DB_NAME = sh(script: "echo '${secretJson}' | python3 -c \"import sys, json; print(json.load(sys.stdin)['dbname'])\"", returnStdout: true).trim()
+                    env.DB_PORT = sh(script: "echo '${secretJson}' | python3 -c \"import sys, json; print(json.load(sys.stdin)['port'])\"", returnStdout: true).trim()
                     
-                    env.DB_USER = sh(
-                        script: "echo '${secretJson}' | python3 -c \"import sys, json; print(json.load(sys.stdin)['username'])\"",
-                        returnStdout: true
-                    ).trim()
-                    
-                    env.DB_PASSWORD = sh(
-                        script: "echo '${secretJson}' | python3 -c \"import sys, json; print(json.load(sys.stdin)['password'])\"",
-                        returnStdout: true
-                    ).trim()
-                    
-                    env.DB_NAME = sh(
-                        script: "echo '${secretJson}' | python3 -c \"import sys, json; print(json.load(sys.stdin)['dbname'])\"",
-                        returnStdout: true
-                    ).trim()
-                    
-                    env.DB_PORT = sh(
-                        script: "echo '${secretJson}' | python3 -c \"import sys, json; print(json.load(sys.stdin)['port'])\"",
-                        returnStdout: true
-                    ).trim()
-                    
-                    echo "✅ Database secrets fetched successfully from Secrets Manager"
-                    echo "DB_HOST: ${env.DB_HOST}"
+                    echo "✅ Database secrets fetched successfully"
                 }
             }
         }
@@ -119,32 +97,34 @@ pipeline {
         stage('Deploy to Private EC2') {
             steps {
                 script {
+                    // Create a temporary script file with the environment variables
                     sh """
+                        cat > /tmp/deploy_commands.sh << 'EOF'
+aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com
+cd /home/ssm-user/capstone-project
+git pull origin main
+cd backend
+cat > .env << ENDENV
+DB_HOST=${DB_HOST}
+DB_PORT=${DB_PORT}
+DB_NAME=${DB_NAME}
+DB_USER=${DB_USER}
+DB_PASSWORD=${DB_PASSWORD}
+FASTAPI_PORT=8000
+NODEJS_PORT=5000
+SPRINGBOOT_PORT=8081
+DOTNET_PORT=7000
+ENDENV
+cat .env
+docker-compose pull
+docker-compose up -d
+docker system prune -f
+EOF
                         aws ssm send-command \
                             --instance-ids ${BACKEND_EC2_ID} \
                             --region ${AWS_REGION} \
                             --document-name "AWS-RunShellScript" \
-                            --parameters 'commands=[
-                                "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com",
-                                "cd /home/ssm-user/capstone-project",
-                                "git pull origin main",
-                                "cd backend",
-                                "cat > .env << 'ENVFILE'
-                                DB_HOST=${DB_HOST}
-                                DB_PORT=${DB_PORT}
-                                DB_NAME=${DB_NAME}
-                                DB_USER=${DB_USER}
-                                DB_PASSWORD=${DB_PASSWORD}
-                                FASTAPI_PORT=8000
-                                NODEJS_PORT=5000
-                                SPRINGBOOT_PORT=8081
-                                DOTNET_PORT=7000
-                                ENVFILE",
-                                "cat .env",
-                                "docker-compose pull",
-                                "docker-compose up -d",
-                                "docker system prune -f"
-                            ]' \
+                            --parameters "commands=['sh /tmp/deploy_commands.sh']" \
                             --comment "Deploy from Jenkins Build ${BUILD_NUMBER}"
                     """
                 }
@@ -154,18 +134,13 @@ pipeline {
         stage('Verify') {
             steps {
                 script {
-                    sh '''
+                    sh """
                         aws ssm send-command \
-                            --instance-ids i-0aba37cc978373707 \
-                            --region ap-south-1 \
+                            --instance-ids ${BACKEND_EC2_ID} \
+                            --region ${AWS_REGION} \
                             --document-name "AWS-RunShellScript" \
-                            --parameters 'commands=[
-                                "echo === Container Status ===",
-                                "docker ps --format 'table {{.Names}}\\t{{.Status}}'",
-                                "echo === Testing FastAPI ====",
-                                "curl -s http://localhost:8000/health || echo FastAPI not responding"
-                            ]'
-                    '''
+                            --parameters 'commands=["docker ps --format \"table {{.Names}}\\t{{.Status}}\"","curl -s http://localhost:8000/health"]'
+                    """
                 }
             }
         }
@@ -174,12 +149,10 @@ pipeline {
     post {
         success {
             echo '🎉 Build and deployment successful!'
-            echo "📦 Images pushed with build number: ${BUILD_NUMBER}"
             echo "🔐 Database credentials sourced from AWS Secrets Manager"
         }
         failure {
             echo '❌ Build or deployment failed!'
-            echo 'Check Jenkins console for details.'
         }
     }
 }
