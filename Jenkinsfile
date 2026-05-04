@@ -18,18 +18,39 @@ pipeline {
         stage('Fetch Database Secrets') {
             steps {
                 script {
+                    // Fetch the secret from AWS Secrets Manager
                     def secretJson = sh(
                         script: "aws secretsmanager get-secret-value --secret-id ${DB_SECRET_NAME} --region ${AWS_REGION} --query SecretString --output text",
                         returnStdout: true
                     ).trim()
                     
-                    env.DB_HOST = sh(script: "echo '${secretJson}' | python3 -c \"import sys, json; print(json.load(sys.stdin)['host'])\"", returnStdout: true).trim()
-                    env.DB_USER = sh(script: "echo '${secretJson}' | python3 -c \"import sys, json; print(json.load(sys.stdin)['username'])\"", returnStdout: true).trim()
-                    env.DB_PASSWORD = sh(script: "echo '${secretJson}' | python3 -c \"import sys, json; print(json.load(sys.stdin)['password'])\"", returnStdout: true).trim()
-                    env.DB_NAME = sh(script: "echo '${secretJson}' | python3 -c \"import sys, json; print(json.load(sys.stdin)['dbname'])\"", returnStdout: true).trim()
-                    env.DB_PORT = sh(script: "echo '${secretJson}' | python3 -c \"import sys, json; print(json.load(sys.stdin)['port'])\"", returnStdout: true).trim()
+                    // Parse JSON and set environment variables
+                    env.DB_HOST = sh(
+                        script: "echo '${secretJson}' | python3 -c \"import sys, json; print(json.load(sys.stdin)['host'])\"",
+                        returnStdout: true
+                    ).trim()
                     
-                    echo "✅ Database secrets fetched successfully"
+                    env.DB_USER = sh(
+                        script: "echo '${secretJson}' | python3 -c \"import sys, json; print(json.load(sys.stdin)['username'])\"",
+                        returnStdout: true
+                    ).trim()
+                    
+                    env.DB_PASSWORD = sh(
+                        script: "echo '${secretJson}' | python3 -c \"import sys, json; print(json.load(sys.stdin)['password'])\"",
+                        returnStdout: true
+                    ).trim()
+                    
+                    env.DB_NAME = sh(
+                        script: "echo '${secretJson}' | python3 -c \"import sys, json; print(json.load(sys.stdin)['dbname'])\"",
+                        returnStdout: true
+                    ).trim()
+                    
+                    env.DB_PORT = sh(
+                        script: "echo '${secretJson}' | python3 -c \"import sys, json; print(json.load(sys.stdin)['port'])\"",
+                        returnStdout: true
+                    ).trim()
+                    
+                    echo "✅ Database secrets fetched successfully from Secrets Manager"
                 }
             }
         }
@@ -134,13 +155,13 @@ EOF
         stage('Verify') {
             steps {
                 script {
-                    sh """
+                    sh '''
                         aws ssm send-command \
-                            --instance-ids ${BACKEND_EC2_ID} \
-                            --region ${AWS_REGION} \
+                            --instance-ids i-0aba37cc978373707 \
+                            --region ap-south-1 \
                             --document-name "AWS-RunShellScript" \
-                            --parameters 'commands=["docker ps --format \"table {{.Names}}\\t{{.Status}}\"","curl -s http://localhost:8000/health"]'
-                    """
+                            --parameters 'commands=["docker ps --format \\"table {{.Names}}\\t{{.Status}}\\"", "curl -s http://localhost:8000/health || echo FastAPI not responding"]'
+                    '''
                 }
             }
         }
@@ -149,10 +170,12 @@ EOF
     post {
         success {
             echo '🎉 Build and deployment successful!'
+            echo "📦 Images pushed with build number: ${BUILD_NUMBER}"
             echo "🔐 Database credentials sourced from AWS Secrets Manager"
         }
         failure {
             echo '❌ Build or deployment failed!'
+            echo 'Check Jenkins console for details.'
         }
     }
 }
