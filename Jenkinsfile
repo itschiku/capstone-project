@@ -5,7 +5,6 @@ pipeline {
         AWS_REGION = 'ap-south-1'
         ECR_ACCOUNT = '475790160954'
         BACKEND_EC2_ID = 'i-0aba37cc978373707'
-        // Secret names in AWS Secrets Manager
         DB_SECRET_NAME = 'capstone-db-secret'
     }
     
@@ -25,33 +24,34 @@ pipeline {
                         returnStdout: true
                     ).trim()
                     
-                    // Parse JSON using Python (since jq may not be installed)
-                    DB_HOST = sh(
+                    // Parse JSON and set environment variables
+                    env.DB_HOST = sh(
                         script: "echo '${secretJson}' | python3 -c \"import sys, json; print(json.load(sys.stdin)['host'])\"",
                         returnStdout: true
                     ).trim()
                     
-                    DB_USER = sh(
+                    env.DB_USER = sh(
                         script: "echo '${secretJson}' | python3 -c \"import sys, json; print(json.load(sys.stdin)['username'])\"",
                         returnStdout: true
                     ).trim()
                     
-                    DB_PASSWORD = sh(
+                    env.DB_PASSWORD = sh(
                         script: "echo '${secretJson}' | python3 -c \"import sys, json; print(json.load(sys.stdin)['password'])\"",
                         returnStdout: true
                     ).trim()
                     
-                    DB_NAME = sh(
+                    env.DB_NAME = sh(
                         script: "echo '${secretJson}' | python3 -c \"import sys, json; print(json.load(sys.stdin)['dbname'])\"",
                         returnStdout: true
                     ).trim()
                     
-                    DB_PORT = sh(
+                    env.DB_PORT = sh(
                         script: "echo '${secretJson}' | python3 -c \"import sys, json; print(json.load(sys.stdin)['port'])\"",
                         returnStdout: true
                     ).trim()
                     
                     echo "✅ Database secrets fetched successfully from Secrets Manager"
+                    echo "DB_HOST: ${env.DB_HOST}"
                 }
             }
         }
@@ -119,7 +119,6 @@ pipeline {
         stage('Deploy to Private EC2') {
             steps {
                 script {
-                    // Create .env file on EC2 with secrets from Secrets Manager
                     sh """
                         aws ssm send-command \
                             --instance-ids ${BACKEND_EC2_ID} \
@@ -130,7 +129,7 @@ pipeline {
                                 "cd /home/ssm-user/capstone-project",
                                 "git pull origin main",
                                 "cd backend",
-                                "cat > .env << 'ENV_FILE'
+                                "cat > .env << 'ENVFILE'
                                 DB_HOST=${DB_HOST}
                                 DB_PORT=${DB_PORT}
                                 DB_NAME=${DB_NAME}
@@ -140,7 +139,7 @@ pipeline {
                                 NODEJS_PORT=5000
                                 SPRINGBOOT_PORT=8081
                                 DOTNET_PORT=7000
-                                ENV_FILE",
+                                ENVFILE",
                                 "cat .env",
                                 "docker-compose pull",
                                 "docker-compose up -d",
@@ -155,18 +154,18 @@ pipeline {
         stage('Verify') {
             steps {
                 script {
-                    sh """
+                    sh '''
                         aws ssm send-command \
-                            --instance-ids ${BACKEND_EC2_ID} \
-                            --region ${AWS_REGION} \
+                            --instance-ids i-0aba37cc978373707 \
+                            --region ap-south-1 \
                             --document-name "AWS-RunShellScript" \
                             --parameters 'commands=[
-                                "echo '=== Container Status ==='",
-                                "docker ps --format 'table {{.Names}}\\\\t{{.Status}}'",
-                                "echo '=== Testing FastAPI ==='",
-                                "curl -s http://localhost:8000/health || echo 'FastAPI not responding'"
+                                "echo === Container Status ===",
+                                "docker ps --format 'table {{.Names}}\\t{{.Status}}'",
+                                "echo === Testing FastAPI ====",
+                                "curl -s http://localhost:8000/health || echo FastAPI not responding"
                             ]'
-                    """
+                    '''
                 }
             }
         }
